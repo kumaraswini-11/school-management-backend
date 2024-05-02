@@ -1,14 +1,20 @@
 import mongoose from "mongoose";
 import Class from "../models/class.models.js";
 
-// Controller function to get all classes with pagination, filtering, and sorting
+// Constants for sortOrder
+const SORT_ORDERS = {
+  ASC: "asc",
+  DESC: "desc",
+};
+
 const getAllClasses = async (req, res) => {
   try {
-    let { page = 1, limit = 10, sortBy, sortOrder = "asc" } = req.query;
-
-    // Parse pagination parameters
-    page = parseInt(page);
-    limit = parseInt(limit);
+    let {
+      page = 1,
+      limit = 10,
+      sortBy,
+      sortOrder = SORT_ORDERS.ASC,
+    } = req.query;
 
     // Validate pagination parameters
     if (isNaN(page) || isNaN(limit) || page <= 0 || limit <= 0) {
@@ -19,27 +25,14 @@ const getAllClasses = async (req, res) => {
 
     const skip = (page - 1) * limit;
 
-    // Build query conditions
-    const query = {};
-    // if (className) query.className = { $regex: new RegExp(className, "i") };
-    // if (year) query.year = year;
-
     // Build sorting criteria
     const sortCriteria = {};
-    if (sortBy) sortCriteria[sortBy] = sortOrder === "asc" ? 1 : -1;
+    if (sortBy) sortCriteria[sortBy] = sortOrder === SORT_ORDERS.ASC ? 1 : -1;
 
     // Fetch classes with pagination, filtering, and sorting
     const [classes, totalClasses] = await Promise.all([
-      Class.find(query)
-        .sort(sortCriteria)
-        .limit(limit)
-        .skip(skip)
-        .populate({
-          path: "teacher",
-          select: "name contactDetails -_id",
-        })
-        .exec(),
-      Class.countDocuments(query),
+      Class.find().sort(sortCriteria).limit(limit).skip(skip).exec(),
+      Class.countDocuments(),
     ]);
 
     // Validate edge case: Empty result set
@@ -58,7 +51,7 @@ const getAllClasses = async (req, res) => {
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: "An error occurred w`hile fetching classes.",
+      message: "An error occurred while fetching classes.",
     });
   }
 };
@@ -84,19 +77,12 @@ const getClassByID = async (req, res) => {
         .json({ success: false, message: "Class not found." });
     }
 
-    res.status(200).json({
-      success: true,
-      classes,
-    });
+    res.status(200).json({ success: true, classes });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: "Internal Server Error",
-    });
+    res.status(500).json({ success: false, message: "Internal Server Error" });
   }
 };
 
-// Controller function to create a new class
 const createClass = async (req, res) => {
   const {
     className,
@@ -106,7 +92,6 @@ const createClass = async (req, res) => {
     students,
   } = req.body;
 
-  console.log(req.body);
   try {
     // Validate required fields
     if (
@@ -119,6 +104,7 @@ const createClass = async (req, res) => {
         .json({ success: false, message: "Missing required fields." });
     }
 
+    // Create new class
     const newClass = await Class.create({
       className,
       studentFees,
@@ -126,9 +112,9 @@ const createClass = async (req, res) => {
       teacher,
       students,
     });
+
     res.status(201).json({ success: true, newClass });
   } catch (error) {
-    console.log(error);
     res.status(500).json({
       success: false,
       message: "An error occurred while creating the class.",
@@ -136,7 +122,6 @@ const createClass = async (req, res) => {
   }
 };
 
-// Controller function to update a class
 const updateClass = async (req, res) => {
   const classId = req.params.id;
   const { className, year, teacher, studentFees, students } = req.body;
@@ -161,11 +146,13 @@ const updateClass = async (req, res) => {
         .json({ success: false, message: "Missing required fields." });
     }
 
+    // Update class
     const updatedClass = await Class.findByIdAndUpdate(
       classId,
       { $set: { className, year, teacher, studentFees, students } },
       { new: true }
     );
+
     res.status(200).json({ success: true, updatedClass });
   } catch (error) {
     res.status(500).json({
@@ -175,7 +162,6 @@ const updateClass = async (req, res) => {
   }
 };
 
-// Controller function to delete a class
 const deleteClass = async (req, res) => {
   const classId = req.params.id;
 
@@ -188,11 +174,10 @@ const deleteClass = async (req, res) => {
         .json({ success: false, message: "Class not found." });
     }
 
-    const deletedClass = await Teacher.deleteOne({ _id: classObj.classId });
+    await Teacher.deleteOne({ _id: classObj.classId });
 
     res.json({ success: true, message: "Class deleted successfully." });
   } catch (error) {
-    console.log(error);
     res.status(500).json({
       success: false,
       message: "An error occurred while deleting the class.",

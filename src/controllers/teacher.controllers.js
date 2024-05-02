@@ -2,7 +2,6 @@ import Teacher from "../models/teacher.models.js";
 import Student from "../models/student.models.js";
 import { isValidDate } from "../utils/isValidDate.js";
 
-// Controller function to get all teachers with pagination, filtering, and sorting
 const getAllTeachers = async (req, res) => {
   try {
     let { page = 1, limit = 10, sortBy, sortOrder = "asc" } = req.query;
@@ -19,11 +18,6 @@ const getAllTeachers = async (req, res) => {
     }
 
     const skip = (page - 1) * limit;
-
-    // Build query conditions
-    const query = {};
-    // if (name) query.name = { $regex: new RegExp(name, "i") };
-    // if (gender) query.gender = gender;
 
     // Build sorting criteria
     const sortCriteria = {};
@@ -102,7 +96,6 @@ const getTeacherByID = async (req, res) => {
       teacher,
     });
   } catch (error) {
-    console.log(error);
     res.status(500).json({
       success: false,
       message: "Internal Server Error",
@@ -110,7 +103,6 @@ const getTeacherByID = async (req, res) => {
   }
 };
 
-// Controller function to create a new teacher
 const createTeacher = async (req, res) => {
   const {
     name,
@@ -165,7 +157,6 @@ const createTeacher = async (req, res) => {
     });
     res.status(201).json({ success: true, newTeacher });
   } catch (error) {
-    console.log(error);
     res.status(500).json({
       success: false,
       message: "An error occurred while creating the teacher.",
@@ -173,7 +164,6 @@ const createTeacher = async (req, res) => {
   }
 };
 
-// Controller function to update a teacher
 const updateTeacher = async (req, res) => {
   const teacherId = req.params.id;
   const {
@@ -219,7 +209,6 @@ const updateTeacher = async (req, res) => {
   }
 };
 
-// Controller function to delete a teacher
 const deleteTeacher = async (req, res) => {
   const teacherId = req.params.id;
 
@@ -236,7 +225,6 @@ const deleteTeacher = async (req, res) => {
 
     res.json({ success: true, message: "Teacher deleted successfully." });
   } catch (error) {
-    console.log(error);
     res.status(500).json({
       success: false,
       message: "An error occurred while deleting the teacher.",
@@ -307,7 +295,6 @@ const getAnalytics = async (req, res) => {
       income: analyticsData.totalStudentIncome,
     });
   } catch (error) {
-    // console.error("Error fetching analytics data:", error);
     res.status(500).json({
       success: false,
       message: "An error occurred while fetching analytics data",

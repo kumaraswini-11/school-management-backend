@@ -2,41 +2,27 @@ import Student from "../models/student.models.js";
 import Class from "../models/class.models.js";
 import { isValidDate } from "../utils/isValidDate.js";
 
-// Controller function to get all students with pagination, filtering, and sorting
 const getAllStudents = async (req, res) => {
+  const { page = 1, limit = 10, sortBy, sortOrder = "asc" } = req.query;
+  const skip = (parseInt(page) - 1) * parseInt(limit);
+
   try {
-    let { page = 1, limit = 10, sortBy, sortOrder = "asc" } = req.query;
-
-    // Parse pagination parameters
-    page = parseInt(page);
-    limit = parseInt(limit);
-
-    // Validate pagination parameters
-    if (isNaN(page) || isNaN(limit) || page <= 0 || limit <= 0) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Invalid pagination parameters." });
-    }
-
-    const skip = (page - 1) * limit;
-
-    // Build query conditions
     const query = {};
-    // if (name) query.name = { $regex: new RegExp(name, "i") };
-    // if (gender) query.gender = gender;
-
-    // Build sorting criteria
-    const sortCriteria = {};
-    if (sortBy) sortCriteria[sortBy] = sortOrder === "asc" ? 1 : -1;
+    const sortCriteria = sortBy
+      ? { [sortBy]: sortOrder === "asc" ? 1 : -1 }
+      : {};
 
     // Fetch students with pagination, filtering, and sorting
-    const [students, totalStudents] = await Promise.all([
-      Student.find(query).sort(sortCriteria).limit(limit).skip(skip).exec(),
-      Student.countDocuments(query),
-    ]);
+    const students = await Student.find(query)
+      .sort(sortCriteria)
+      .limit(parseInt(limit))
+      .skip(skip)
+      .lean()
+      .exec();
 
-    // Validate edge case: Empty result set
-    if (totalStudents === 0) {
+    const totalStudents = await Student.countDocuments(query);
+
+    if (students.length === 0) {
       return res
         .status(404)
         .json({ success: false, message: "No students found." });
@@ -45,11 +31,10 @@ const getAllStudents = async (req, res) => {
     res.status(200).json({
       totalStudents,
       totalPages: Math.ceil(totalStudents / limit),
-      currentPage: page,
+      currentPage: parseInt(page),
       students,
     });
   } catch (error) {
-    console.log(error);
     res.status(500).json({
       success: false,
       message: "An error occurred while fetching students.",
@@ -77,7 +62,6 @@ const getStudentByID = async (req, res) => {
       student,
     });
   } catch (error) {
-    console.log(error);
     res.status(500).json({
       success: false,
       message: "Internal Server Error",
@@ -85,24 +69,14 @@ const getStudentByID = async (req, res) => {
   }
 };
 
-// Controller function to create a new student
 const createStudent = async (req, res) => {
-  const {
-    studentName: name,
-    gender,
-    dob,
-    email: contactDetails,
-    paid: feesPaid,
-    class: sassignedClass,
-  } = req.body;
+  const { name, gender, dob, contactDetails, feesPaid, assignedClass } =
+    req.body;
 
   try {
     // Validate required fields
-    if (
-      [name, gender, dob, contactDetails, feesPaid].some(
-        (field) => !field || field === ""
-      )
-    ) {
+    const requiredFields = [name, gender, dob, contactDetails, feesPaid];
+    if (requiredFields.some((field) => !field || field === "")) {
       return res
         .status(400)
         .json({ success: false, message: "Missing required fields." });
@@ -116,7 +90,7 @@ const createStudent = async (req, res) => {
       });
     }
 
-    // Check if student already exists with the given contactDetails, dob, and gender
+    // Check if student already exists
     const existedStudent = await Student.findOne({
       contactDetails,
       dob,
@@ -135,11 +109,10 @@ const createStudent = async (req, res) => {
       dob,
       contactDetails,
       feesPaid,
-      sassignedClass,
+      assignedClass,
     });
     res.status(201).json({ success: true, newStudent });
   } catch (error) {
-    console.log(error);
     res.status(500).json({
       success: false,
       message: "An error occurred while creating the student.",
@@ -147,16 +120,15 @@ const createStudent = async (req, res) => {
   }
 };
 
-// Controller function to update a student
 const updateStudent = async (req, res) => {
   const studentId = req.params.id;
   const {
-    studentName: name,
+    name,
     gender,
     dob,
     email: contactDetails,
     paid: feesPaid,
-    class: sassignedClass,
+    class: assignedClass,
   } = req.body;
 
   try {
@@ -169,11 +141,8 @@ const updateStudent = async (req, res) => {
     }
 
     // Validate required fields
-    if (
-      [name, gender, dob, contactDetails, feesPaid].some(
-        (field) => !field || field === ""
-      )
-    ) {
+    const requiredFields = [name, gender, dob, contactDetails, feesPaid];
+    if (requiredFields.some((field) => !field || field === "")) {
       return res
         .status(400)
         .json({ success: false, message: "Missing required fields." });
@@ -181,9 +150,12 @@ const updateStudent = async (req, res) => {
 
     const updatedStudent = await Student.findByIdAndUpdate(
       studentId,
-      { $set: { name, gender, dob, contactDetails, feesPaid, sassignedClass } },
+      {
+        $set: { name, gender, dob, contactDetails, feesPaid, assignedClass },
+      },
       { new: true }
     );
+
     res.status(200).json({ success: true, updatedStudent });
   } catch (error) {
     res.status(500).json({
@@ -193,10 +165,8 @@ const updateStudent = async (req, res) => {
   }
 };
 
-// Controller function to delete a student
 const deleteStudent = async (req, res) => {
-  const studentId = req.params;
-  console.log(req.params);
+  const studentId = req.params.id;
 
   try {
     // Check if student exists
@@ -207,11 +177,10 @@ const deleteStudent = async (req, res) => {
         .json({ success: false, message: "Student not found." });
     }
 
-    const deletedStudent = await Student.deleteOne({ _id: student.studentId });
+    await Student.deleteOne({ _id: studentId });
 
     res.json({ success: true, message: "Student deleted successfully." });
   } catch (error) {
-    // console.log(error);
     res.status(500).json({
       success: false,
       message: "An error occurred while deleting the student.",
@@ -219,12 +188,10 @@ const deleteStudent = async (req, res) => {
   }
 };
 
-// Controller function to get the count of male and female students in a class
 const getClassGenderStats = async (req, res) => {
   const classId = req.params.classId;
 
   try {
-    // Check if the class exists
     const classExists = await Class.exists({ _id: classId });
     if (!classExists) {
       return res
@@ -233,11 +200,11 @@ const getClassGenderStats = async (req, res) => {
     }
 
     const maleCount = await Student.countDocuments({
-      sassignedClass: classId,
+      assignedClass: classId,
       gender: "male",
     });
     const femaleCount = await Student.countDocuments({
-      sassignedClass: classId,
+      assignedClass: classId,
       gender: "female",
     });
 
@@ -254,15 +221,9 @@ const getAllStudentNames = async (req, res) => {
   try {
     const students = await Student.find({}, "_id name");
 
-    res.status(200).json({
-      success: true,
-      students,
-    });
+    res.status(200).json({ success: true, students });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: "Internal Server Error",
-    });
+    res.status(500).json({ success: false, message: "Internal Server Error" });
   }
 };
 
