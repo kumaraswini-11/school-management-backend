@@ -14,6 +14,10 @@ const getAllStudents = async (req, res) => {
 
     // Fetch students with pagination, filtering, and sorting
     const students = await Student.find(query)
+      .populate({
+        path: "sassignedClass",
+        select: "_id className",
+      })
       .sort(sortCriteria)
       .limit(parseInt(limit))
       .skip(skip)
@@ -47,7 +51,7 @@ const getStudentByID = async (req, res) => {
 
   try {
     const student = await Student.findById(id).populate({
-      path: "class",
+      path: "sassignedClass",
       select: "_id className",
     });
 
@@ -70,8 +74,14 @@ const getStudentByID = async (req, res) => {
 };
 
 const createStudent = async (req, res) => {
-  const { name, gender, dob, contactDetails, feesPaid, assignedClass } =
-    req.body;
+  const {
+    studentName: name,
+    gender,
+    dob,
+    email: contactDetails,
+    paid: feesPaid,
+    class: sassignedClass,
+  } = req.body;
 
   try {
     // Validate required fields
@@ -109,7 +119,7 @@ const createStudent = async (req, res) => {
       dob,
       contactDetails,
       feesPaid,
-      assignedClass,
+      sassignedClass,
     });
     res.status(201).json({ success: true, newStudent });
   } catch (error) {
@@ -123,12 +133,12 @@ const createStudent = async (req, res) => {
 const updateStudent = async (req, res) => {
   const studentId = req.params.id;
   const {
-    name,
+    studentName: name,
     gender,
     dob,
     email: contactDetails,
     paid: feesPaid,
-    class: assignedClass,
+    class: sassignedClass,
   } = req.body;
 
   try {
@@ -151,7 +161,7 @@ const updateStudent = async (req, res) => {
     const updatedStudent = await Student.findByIdAndUpdate(
       studentId,
       {
-        $set: { name, gender, dob, contactDetails, feesPaid, assignedClass },
+        $set: { name, gender, dob, contactDetails, feesPaid, sassignedClass },
       },
       { new: true }
     );

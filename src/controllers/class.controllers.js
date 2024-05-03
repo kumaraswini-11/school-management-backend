@@ -124,7 +124,13 @@ const createClass = async (req, res) => {
 
 const updateClass = async (req, res) => {
   const classId = req.params.id;
-  const { className, year, teacher, studentFees, students } = req.body;
+  const {
+    className,
+    teacherAssigned: teacher,
+    classFee: studentFees,
+    students,
+    maxLimit: limitStudents,
+  } = req.body;
 
   try {
     // Check if class exists
@@ -137,8 +143,8 @@ const updateClass = async (req, res) => {
 
     // Validate required fields
     if (
-      [className, year, teacher, studentFees].some(
-        (field) => !field || field.trim() === ""
+      [className, teacher, studentFees, limitStudents].some(
+        (field) => !field || field === ""
       )
     ) {
       return res
@@ -149,7 +155,15 @@ const updateClass = async (req, res) => {
     // Update class
     const updatedClass = await Class.findByIdAndUpdate(
       classId,
-      { $set: { className, year, teacher, studentFees, students } },
+      {
+        $set: {
+          className,
+          teacher,
+          studentFees,
+          limitStudents,
+          students,
+        },
+      },
       { new: true }
     );
 
@@ -174,7 +188,7 @@ const deleteClass = async (req, res) => {
         .json({ success: false, message: "Class not found." });
     }
 
-    await Teacher.deleteOne({ _id: classObj.classId });
+    await Class.deleteOne({ _id: classId });
 
     res.json({ success: true, message: "Class deleted successfully." });
   } catch (error) {

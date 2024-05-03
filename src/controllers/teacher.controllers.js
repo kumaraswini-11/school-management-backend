@@ -23,6 +23,9 @@ const getAllTeachers = async (req, res) => {
     const sortCriteria = {};
     if (sortBy) sortCriteria[sortBy] = sortOrder === "asc" ? 1 : -1;
 
+    // Defined query for filtering
+    const query = {};
+
     // Fetch teachers with pagination, filtering, and sorting
     const [teachers, totalTeachers] = await Promise.all([
       Teacher.find(query)
@@ -113,7 +116,6 @@ const createTeacher = async (req, res) => {
     class: tassignedClass,
   } = req.body;
 
-  console.log(req.body);
   try {
     // Validate required fields
     if (
@@ -187,7 +189,7 @@ const updateTeacher = async (req, res) => {
     // Validate required fields
     if (
       [name, gender, dob, contactDetails, salary, tassignedClass].some(
-        (field) => !field || field.trim() === ""
+        (field) => !field || field === ""
       )
     ) {
       return res
@@ -235,7 +237,6 @@ const deleteTeacher = async (req, res) => {
 const getAnalytics = async (req, res) => {
   try {
     const { view, month, year } = req.query;
-    console.log(view, month, year);
 
     if (view !== "monthly" && view !== "yearly") {
       return res

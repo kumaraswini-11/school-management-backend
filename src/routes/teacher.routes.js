@@ -11,11 +11,11 @@ import {
 
 const router = Router();
 router.route("/teachers").get(getAllTeachers);
-router.route("/teachers/:id").get(getTeacherByID);
 router.route("/teachers").post(createTeacher);
 router.route("/teachers/:id").put(updateTeacher);
 router.route("/teachers/:id").delete(deleteTeacher);
 router.route("/teachers/analytics").get(getAnalytics);
 router.route("/all-teachers-name").get(getAllTeachersName);
+router.route("/teachers/:id").get(getTeacherByID);
 
 export default router;
