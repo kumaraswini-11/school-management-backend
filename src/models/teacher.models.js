@@ -9,7 +9,6 @@ const teacherSchema = new Schema(
       type: String,
       required: true,
       trim: true,
-      minlength: [2, "Minimum length of the name should be 2 characters."],
     },
     gender: {
       type: String,
@@ -21,21 +20,42 @@ const teacherSchema = new Schema(
       required: true,
     },
     contactDetails: {
-      type: String,
-      required: true,
-      trim: true,
+      email: { type: String, required: true, trim: true, unique: true },
+      phone: { type: String, required: true, trim: true, unique: true },
     },
     salary: {
-      // consider - this is teacher's annual salary
+      // salary can be ['monthly', 'yearly']. I m considering monthly.
       type: Number,
       required: true,
+      min: 0,
     },
-    tassignedClass: {
-      type: mongoose.Schema.Types.ObjectId,
+    assignedClass: {
+      // This can be null initially
+      type: Schema.Types.ObjectId,
       ref: "Class",
+      default: null,
     },
   },
   { timestamps: true }
 );
+
+// Update assignedClass field in Teacher model when Class is updated
+teacherSchema.pre("findOneAndUpdate", async function (next) {
+  const docToUpdate = await this.model.findOne(this.getFilter());
+  const update = this.getUpdate();
+
+  // Check if `assignedClass` field is updated
+  if (
+    update.assignedClass &&
+    docToUpdate.assignedClass !== update.assignedClass
+  ) {
+    // Update associated Class's teacher field
+    await this.model("Class").findByIdAndUpdate(update.assignedClass, {
+      teacher: this._id,
+    });
+  }
+
+  next();
+});
 
 export default mongoose.model("Teacher", teacherSchema);

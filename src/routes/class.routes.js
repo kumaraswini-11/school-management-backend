@@ -1,23 +1,16 @@
 import { Router } from "express";
 import {
   getAllClasses,
-  getClassByID,
+  getClassById,
   createClass,
   updateClass,
   deleteClass,
-  getAllClassesGenderCountsStatistics,
-  getClassGenderCountsStatistics,
-  getAllClassNames,
+  getClassGenderStatistics,
 } from "../controllers/class.controllers.js";
 
 const router = Router();
-router.route("/classes").get(getAllClasses);
-router.route("/classes/:id").get(getClassByID);
-router.route("/classes").post(createClass);
-router.route("/classes/:id").put(updateClass);
-router.route("/classes/:id").delete(deleteClass);
-// router.route("/classes/graph").get(getAllClassesGenderCountsStatistics);
-router.route("/classes/graph/:id").get(getClassGenderCountsStatistics);
-router.route("/all-classes-name").get(getAllClassNames);
+router.route("/").get(getAllClasses).post(createClass);
+router.route("/:id").get(getClassById).put(updateClass).delete(deleteClass);
+router.route("/:id/analytics").get(getClassGenderStatistics);
 
 export default router;

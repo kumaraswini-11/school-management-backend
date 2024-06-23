@@ -1,54 +1,44 @@
-import mongoose from "mongoose";
 import Class from "../models/class.models.js";
-
-// Constants for sortOrder
-const SORT_ORDERS = {
-  ASC: "asc",
-  DESC: "desc",
-};
+import { validatePaginationParams } from "../utils/validatePagination.js";
 
 const getAllClasses = async (req, res) => {
   try {
-    let {
-      page = 1,
-      limit = 10,
-      sortBy,
-      sortOrder = SORT_ORDERS.ASC,
-    } = req.query;
+    const { page = 1, limit = 10 } = req.query;
 
-    // Validate pagination parameters
-    if (isNaN(page) || isNaN(limit) || page <= 0 || limit <= 0) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Invalid pagination parameters." });
+    const pageNum = parseInt(page, 10);
+    const limitNum = parseInt(limit, 10);
+
+    if (!validatePaginationParams(page, limit)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid pagination parameters.",
+      });
     }
 
-    const skip = (page - 1) * limit;
+    const skip = (pageNum - 1) * limitNum;
 
-    // Build sorting criteria
-    const sortCriteria = {};
-    if (sortBy) sortCriteria[sortBy] = sortOrder === SORT_ORDERS.ASC ? 1 : -1;
-
-    // Fetch classes with pagination, filtering, and sorting
     const [classes, totalClasses] = await Promise.all([
-      Class.find().sort(sortCriteria).limit(limit).skip(skip).exec(),
+      Class.find()
+        .skip(skip)
+        .limit(limitNum)
+        .populate("teacher", "name")
+        .populate("students", "name")
+        .exec(),
       Class.countDocuments(),
     ]);
 
-    // Validate edge case: Empty result set
-    if (totalClasses === 0) {
-      return res
-        .status(404)
-        .json({ success: false, message: "No classes found." });
-    }
-
     res.status(200).json({
-      totalClasses,
-      totalPages: Math.ceil(totalClasses / limit),
-      currentPage: page,
-      classes,
+      success: true,
+      data: classes,
+      pagination: {
+        currentPage: pageNum,
+        totalPages: Math.ceil(totalClasses / limitNum),
+        totalClasses,
+        limit: limitNum,
+      },
     });
   } catch (error) {
+    console.error("Error fetching classes:", error);
     res.status(500).json({
       success: false,
       message: "An error occurred while fetching classes.",
@@ -56,197 +46,137 @@ const getAllClasses = async (req, res) => {
   }
 };
 
-const getClassByID = async (req, res) => {
+const getClassById = async (req, res) => {
   const { id } = req.params;
 
   try {
-    const classes = await Class.findById(id).populate([
-      {
-        path: "teacher",
-        select: "_id name",
-      },
-      {
-        path: "students",
-        select: "_id name",
-      },
-    ]);
+    const foundClass = await Class.findById(id)
+      .populate("teacher", "name")
+      .populate("students", "name");
 
-    if (!classes) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Class not found." });
+    if (!foundClass) {
+      return res.status(404).json({
+        success: false,
+        message: "Class not found.",
+      });
     }
 
-    res.status(200).json({ success: true, classes });
+    res.status(200).json({
+      success: true,
+      data: foundClass,
+    });
   } catch (error) {
-    res.status(500).json({ success: false, message: "Internal Server Error" });
+    console.error("Error fetching class:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal Server Error",
+    });
   }
 };
 
 const createClass = async (req, res) => {
-  const {
-    className,
-    classFee: studentFees,
-    maxLimit: limitStudents,
-    teacherAssigned: teacher,
-    students,
-  } = req.body;
-
   try {
-    // Validate required fields
-    if (
-      [className, studentFees, limitStudents, teacher].some(
-        (field) => !field || field === ""
-      )
-    ) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Missing required fields." });
+    const { name, year, teacher, studentFees, students, studentLimit } =
+      req.body;
+
+    if (!name || !studentFees || !studentLimit) {
+      return res.status(400).json({
+        success: false,
+        message: "Please provide required fields.",
+      });
     }
 
-    // Create new class
-    const newClass = await Class.create({
-      className,
-      studentFees,
-      limitStudents,
+    const newClass = new Class({
+      name,
+      year,
       teacher,
+      studentFees,
       students,
+      studentLimit,
     });
 
-    res.status(201).json({ success: true, newClass });
+    const savedClass = await newClass.save();
+
+    res.status(201).json({
+      success: true,
+      data: savedClass,
+    });
   } catch (error) {
+    console.error("Error creating class:", error);
     res.status(500).json({
       success: false,
-      message: "An error occurred while creating the class.",
+      message: "Failed to create class. Please try again.",
     });
   }
 };
 
 const updateClass = async (req, res) => {
-  const classId = req.params.id;
-  const {
-    className,
-    teacherAssigned: teacher,
-    classFee: studentFees,
-    students,
-    maxLimit: limitStudents,
-  } = req.body;
+  const { id } = req.params;
 
   try {
-    // Check if class exists
-    const classObj = await Class.findById(classId);
-    if (!classObj) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Class not found." });
+    const { name, year, studentFees, studentLimit } = req.body;
+
+    if (!name || !year || !studentFees || !studentLimit) {
+      return res.status(400).json({
+        success: false,
+        message: "Please provide all required fields.",
+      });
     }
 
-    // Validate required fields
-    if (
-      [className, teacher, studentFees, limitStudents].some(
-        (field) => !field || field === ""
-      )
-    ) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Missing required fields." });
-    }
-
-    // Update class
     const updatedClass = await Class.findByIdAndUpdate(
-      classId,
-      {
-        $set: {
-          className,
-          teacher,
-          studentFees,
-          limitStudents,
-          students,
-        },
-      },
+      id,
+      { name, year, studentFees, studentLimit },
       { new: true }
     );
 
-    res.status(200).json({ success: true, updatedClass });
+    if (!updatedClass) {
+      return res.status(404).json({
+        success: false,
+        message: "Class not found or could not be updated.",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: updatedClass,
+    });
   } catch (error) {
+    console.error("Error updating class:", error);
     res.status(500).json({
       success: false,
-      message: "An error occurred while updating the class.",
+      message: "Failed to update class. Please try again.",
     });
   }
 };
 
 const deleteClass = async (req, res) => {
-  const classId = req.params.id;
+  const { id } = req.params;
 
   try {
-    // Check if class exists
-    const classObj = await Class.findById(classId);
-    if (!classObj) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Class not found." });
+    const deletedClass = await Class.findByIdAndDelete(id);
+
+    if (!deletedClass) {
+      return res.status(404).json({
+        success: false,
+        message: "Class not found or already deleted.",
+      });
     }
 
-    await Class.deleteOne({ _id: classId });
-
-    res.json({ success: true, message: "Class deleted successfully." });
+    res.status(200).json({
+      success: true,
+      message: "Class deleted successfully.",
+      data: deletedClass,
+    });
   } catch (error) {
+    console.error("Error deleting class:", error);
     res.status(500).json({
       success: false,
-      message: "An error occurred while deleting the class.",
+      message: "Failed to delete class. Please try again.",
     });
   }
 };
 
-const getAllClassesGenderCountsStatistics = async (req, res) => {
-  try {
-    const classData = await Class.aggregate([
-      {
-        $lookup: {
-          from: "students",
-          localField: "students",
-          foreignField: "_id",
-          as: "studentsInfo",
-        },
-      },
-      {
-        $project: {
-          _id: 1,
-          className: 1,
-          maleCount: {
-            $size: {
-              $filter: {
-                input: "$studentsInfo",
-                as: "student",
-                cond: { $eq: ["$$student.gender", "Male"] },
-              },
-            },
-          },
-          femaleCount: {
-            $size: {
-              $filter: {
-                input: "$studentsInfo",
-                as: "student",
-                cond: { $eq: ["$$student.gender", "Female"] },
-              },
-            },
-          },
-        },
-      },
-    ]);
-
-    res.status(200).json(classData);
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message:
-        "An error occurred while fetching gender counts for all classes.",
-    });
-  }
-};
-
-const getClassGenderCountsStatistics = async (req, res) => {
+const getClassGenderStatistics = async (req, res) => {
   const classId = req.params.id;
 
   try {
@@ -256,9 +186,10 @@ const getClassGenderCountsStatistics = async (req, res) => {
     });
 
     if (!classData) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Class not found." });
+      return res.status(404).json({
+        success: false,
+        message: "Class not found.",
+      });
     }
 
     const maleCount = classData.students.filter(
@@ -270,7 +201,7 @@ const getClassGenderCountsStatistics = async (req, res) => {
 
     res.status(200).json({
       _id: classData._id,
-      className: classData.className,
+      className: classData.name,
       maleCount,
       femaleCount,
     });
@@ -282,29 +213,11 @@ const getClassGenderCountsStatistics = async (req, res) => {
   }
 };
 
-const getAllClassNames = async (req, res) => {
-  try {
-    const classes = await Class.find({}, "_id className");
-
-    res.status(200).json({
-      success: true,
-      classes,
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: "Internal Server Error",
-    });
-  }
-};
-
 export {
   getAllClasses,
-  getClassByID,
+  getClassById,
   createClass,
   updateClass,
   deleteClass,
-  getAllClassesGenderCountsStatistics,
-  getClassGenderCountsStatistics,
-  getAllClassNames,
+  getClassGenderStatistics,
 };

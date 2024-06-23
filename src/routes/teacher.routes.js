@@ -1,21 +1,22 @@
 import { Router } from "express";
 import {
   getAllTeachers,
-  getTeacherByID,
+  getTeacherById,
   createTeacher,
   updateTeacher,
   deleteTeacher,
-  getAnalytics,
-  getAllTeachersName,
+  getTeacherAnalytics,
+  // getAllTeacherNames,
 } from "../controllers/teacher.controllers.js";
 
 const router = Router();
-router.route("/teachers").get(getAllTeachers);
-router.route("/teachers").post(createTeacher);
-router.route("/teachers/:id").put(updateTeacher);
-router.route("/teachers/:id").delete(deleteTeacher);
-router.route("/teachers/analytics").get(getAnalytics);
-router.route("/all-teachers-name").get(getAllTeachersName);
-router.route("/teachers/:id").get(getTeacherByID);
+router.route("/").get(getAllTeachers).post(createTeacher);
+router
+  .route("/:id")
+  .put(updateTeacher)
+  .delete(deleteTeacher)
+  .get(getTeacherById);
+router.route("/analytics").get(getTeacherAnalytics);
+// router.route("/all-teachers-name").get(getAllTeacherNames);
 
 export default router;

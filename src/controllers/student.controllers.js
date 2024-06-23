@@ -1,44 +1,44 @@
 import Student from "../models/student.models.js";
 import Class from "../models/class.models.js";
-import { isValidDate } from "../utils/isValidDate.js";
+import { validatePaginationParams } from "../utils/validatePagination.js";
 
 const getAllStudents = async (req, res) => {
-  const { page = 1, limit = 10, sortBy, sortOrder = "asc" } = req.query;
-  const skip = (parseInt(page) - 1) * parseInt(limit);
-
   try {
-    const query = {};
-    const sortCriteria = sortBy
-      ? { [sortBy]: sortOrder === "asc" ? 1 : -1 }
-      : {};
+    const { page = 1, limit = 10 } = req.query;
 
-    // Fetch students with pagination, filtering, and sorting
-    const students = await Student.find(query)
-      .populate({
-        path: "sassignedClass",
-        select: "_id className",
-      })
-      .sort(sortCriteria)
-      .limit(parseInt(limit))
-      .skip(skip)
-      .lean()
-      .exec();
+    const pageNum = parseInt(page, 10);
+    const limitNum = parseInt(limit, 10);
 
-    const totalStudents = await Student.countDocuments(query);
-
-    if (students.length === 0) {
-      return res
-        .status(404)
-        .json({ success: false, message: "No students found." });
+    if (!validatePaginationParams(pageNum, limitNum)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid pagination parameters.",
+      });
     }
 
+    const skip = (pageNum - 1) * limitNum;
+
+    const [students, totalStudents] = await Promise.all([
+      Student.find()
+        .skip(skip)
+        .limit(limitNum)
+        .populate("class", "name")
+        .exec(),
+      Student.countDocuments(),
+    ]);
+
     res.status(200).json({
-      totalStudents,
-      totalPages: Math.ceil(totalStudents / limit),
-      currentPage: parseInt(page),
-      students,
+      success: true,
+      data: students,
+      pagination: {
+        currentPage: pageNum,
+        totalPages: Math.ceil(totalStudents / limitNum),
+        totalStudents,
+        limit: limitNum,
+      },
     });
   } catch (error) {
+    console.error("Error fetching students:", error);
     res.status(500).json({
       success: false,
       message: "An error occurred while fetching students.",
@@ -46,26 +46,25 @@ const getAllStudents = async (req, res) => {
   }
 };
 
-const getStudentByID = async (req, res) => {
+const getStudentById = async (req, res) => {
   const { id } = req.params;
 
   try {
-    const student = await Student.findById(id).populate({
-      path: "sassignedClass",
-      select: "_id className",
-    });
+    const student = await Student.findById(id);
 
     if (!student) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Student not found." });
+      return res.status(404).json({
+        success: false,
+        message: "Student not found.",
+      });
     }
 
     res.status(200).json({
       success: true,
-      student,
+      data: student,
     });
   } catch (error) {
+    console.error("Error fetching student:", error);
     res.status(500).json({
       success: false,
       message: "Internal Server Error",
@@ -74,131 +73,130 @@ const getStudentByID = async (req, res) => {
 };
 
 const createStudent = async (req, res) => {
-  const {
-    studentName: name,
-    gender,
-    dob,
-    email: contactDetails,
-    paid: feesPaid,
-    class: sassignedClass,
-  } = req.body;
-
   try {
-    // Validate required fields
-    const requiredFields = [name, gender, dob, contactDetails, feesPaid];
-    if (requiredFields.some((field) => !field || field === "")) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Missing required fields." });
-    }
-
-    // Validate date of birth format
-    if (!isValidDate(dob)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid date of birth format. Please provide a valid date.",
-      });
-    }
-
-    // Check if student already exists
-    const existedStudent = await Student.findOne({
-      contactDetails,
-      dob,
-      gender,
-    });
-    if (existedStudent) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Student already exists." });
-    }
-
-    // Create new student
-    const newStudent = await Student.create({
+    const {
       name,
       gender,
       dob,
-      contactDetails,
+      email,
+      phone,
       feesPaid,
-      sassignedClass,
+      class: classId,
+    } = req.body;
+
+    if (!name || !gender || !dob || !email || !phone || !feesPaid || !classId) {
+      return res.status(400).json({
+        success: false,
+        message: "Please provide all required fields.",
+      });
+    }
+
+    const newStudent = new Student({
+      name,
+      gender,
+      dob: new Date(dob),
+      contactDetails: { email, phone },
+      feesPaid,
+      class: classId,
     });
-    res.status(201).json({ success: true, newStudent });
+
+    const savedStudent = await newStudent.save();
+
+    res.status(201).json({
+      success: true,
+      data: savedStudent,
+    });
   } catch (error) {
+    console.error("Error creating student:", error);
     res.status(500).json({
       success: false,
-      message: "An error occurred while creating the student.",
+      message: "Failed to create student. Please try again.",
     });
   }
 };
 
 const updateStudent = async (req, res) => {
-  const studentId = req.params.id;
-  const {
-    studentName: name,
-    gender,
-    dob,
-    email: contactDetails,
-    paid: feesPaid,
-    class: sassignedClass,
-  } = req.body;
+  const { id } = req.params;
 
   try {
-    // Check if student exists
-    const student = await Student.findById(studentId);
-    if (!student) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Student not found." });
-    }
+    const {
+      name,
+      gender,
+      dob,
+      email,
+      phone,
+      feesPaid,
+      class: classId,
+    } = req.body;
 
-    // Validate required fields
-    const requiredFields = [name, gender, dob, contactDetails, feesPaid];
-    if (requiredFields.some((field) => !field || field === "")) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Missing required fields." });
+    if (!name || !gender || !dob || !email || !phone || !feesPaid || !classId) {
+      return res.status(400).json({
+        success: false,
+        message: "Please provide all required fields.",
+      });
     }
 
     const updatedStudent = await Student.findByIdAndUpdate(
-      studentId,
+      id,
       {
-        $set: { name, gender, dob, contactDetails, feesPaid, sassignedClass },
+        name,
+        gender,
+        dob: new Date(dob),
+        contactDetails: { email, phone },
+        feesPaid,
+        class: classId,
       },
       { new: true }
     );
 
-    res.status(200).json({ success: true, updatedStudent });
+    if (!updatedStudent) {
+      return res.status(404).json({
+        success: false,
+        message: "Student not found or could not be updated.",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: updatedStudent,
+    });
   } catch (error) {
+    console.error("Error updating student:", error);
     res.status(500).json({
       success: false,
-      message: "An error occurred while updating the student.",
+      message: "Failed to update student. Please try again.",
     });
   }
 };
 
 const deleteStudent = async (req, res) => {
-  const studentId = req.params.id;
+  const { id } = req.params;
 
   try {
-    // Check if student exists
-    const student = await Student.findById(studentId);
-    if (!student) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Student not found." });
+    const deletedStudent = await Student.findByIdAndDelete(id);
+
+    if (!deletedStudent) {
+      return res.status(404).json({
+        success: false,
+        message: "Student not found or already deleted.",
+      });
     }
 
-    await Student.deleteOne({ _id: studentId });
-
-    res.json({ success: true, message: "Student deleted successfully." });
+    res.status(200).json({
+      success: true,
+      message: "Student deleted successfully.",
+      data: deletedStudent,
+    });
   } catch (error) {
+    console.error("Error deleting student:", error);
     res.status(500).json({
       success: false,
-      message: "An error occurred while deleting the student.",
+      message: "Failed to delete student. Please try again.",
     });
   }
 };
 
-const getClassGenderStats = async (req, res) => {
+const getStudentGenderStats = async (req, res) => {
   const classId = req.params.classId;
 
   try {
@@ -209,17 +207,18 @@ const getClassGenderStats = async (req, res) => {
         .json({ success: false, message: "Class not found." });
     }
 
-    const maleCount = await Student.countDocuments({
-      assignedClass: classId,
-      gender: "male",
-    });
-    const femaleCount = await Student.countDocuments({
-      assignedClass: classId,
-      gender: "female",
-    });
+    const maleCount = await Student.find({
+      class: classId,
+      gender: "Male",
+    }).countDocuments();
+    const femaleCount = await Student.find({
+      class: classId,
+      gender: "Female",
+    }).countDocuments();
 
     res.status(200).json({ maleCount, femaleCount });
   } catch (error) {
+    console.error("Error fetching class gender stats:", error);
     res.status(500).json({
       success: false,
       message: "An error occurred while fetching class gender stats.",
@@ -227,22 +226,11 @@ const getClassGenderStats = async (req, res) => {
   }
 };
 
-const getAllStudentNames = async (req, res) => {
-  try {
-    const students = await Student.find({}, "_id name");
-
-    res.status(200).json({ success: true, students });
-  } catch (error) {
-    res.status(500).json({ success: false, message: "Internal Server Error" });
-  }
-};
-
 export {
   getAllStudents,
-  getStudentByID,
+  getStudentById,
   createStudent,
   updateStudent,
   deleteStudent,
-  getClassGenderStats,
-  getAllStudentNames,
+  getStudentGenderStats,
 };

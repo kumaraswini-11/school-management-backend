@@ -1,77 +1,44 @@
 import Teacher from "../models/teacher.models.js";
-import Student from "../models/student.models.js";
-import { isValidDate } from "../utils/isValidDate.js";
+import Class from "../models/class.models.js";
+import { validatePaginationParams } from "../utils/validatePagination.js";
 
 const getAllTeachers = async (req, res) => {
   try {
-    let { page = 1, limit = 10, sortBy, sortOrder = "asc" } = req.query;
+    const { page = 1, limit = 10 } = req.query;
 
-    // Parse pagination parameters
-    page = parseInt(page);
-    limit = parseInt(limit);
+    const pageNum = parseInt(page, 10);
+    const limitNum = parseInt(limit, 10);
 
-    // Validate pagination parameters
-    if (isNaN(page) || isNaN(limit) || page <= 0 || limit <= 0) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Invalid pagination parameters." });
+    if (!validatePaginationParams(pageNum, limitNum)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid pagination parameters.",
+      });
     }
 
-    const skip = (page - 1) * limit;
+    const skip = (pageNum - 1) * limitNum;
 
-    // Build sorting criteria
-    const sortCriteria = {};
-    if (sortBy) sortCriteria[sortBy] = sortOrder === "asc" ? 1 : -1;
-
-    // Defined query for filtering
-    const query = {};
-
-    // Fetch teachers with pagination, filtering, and sorting
     const [teachers, totalTeachers] = await Promise.all([
-      Teacher.find(query)
-        .sort(sortCriteria)
-        .limit(limit)
+      Teacher.find()
         .skip(skip)
-        .populate({
-          path: "tassignedClass",
-          select: "className",
-        })
+        .limit(limitNum)
+        .populate("assignedClass", "name")
         .exec(),
-      Teacher.countDocuments(query),
+      Teacher.countDocuments(),
     ]);
 
-    // Validate edge case: Empty result set
-    if (totalTeachers === 0) {
-      return res
-        .status(404)
-        .json({ success: false, message: "No teachers found." });
-    }
-
     res.status(200).json({
-      totalTeachers,
-      totalPages: Math.ceil(totalTeachers / limit),
-      currentPage: page,
-      teachers: teachers.map(
-        ({
-          _id,
-          name,
-          gender,
-          dob,
-          contactDetails,
-          salary,
-          tassignedClass,
-        }) => ({
-          _id,
-          name,
-          gender,
-          dob,
-          contactDetails,
-          salary,
-          tassignedClass: tassignedClass ? tassignedClass.className : null,
-        })
-      ),
+      success: true,
+      data: teachers,
+      pagination: {
+        currentPage: pageNum,
+        totalPages: Math.ceil(totalTeachers / limitNum),
+        totalTeachers,
+        limit: limitNum,
+      },
     });
   } catch (error) {
+    console.error("Error fetching teachers:", error);
     res.status(500).json({
       success: false,
       message: "An error occurred while fetching teachers.",
@@ -79,26 +46,25 @@ const getAllTeachers = async (req, res) => {
   }
 };
 
-const getTeacherByID = async (req, res) => {
+const getTeacherById = async (req, res) => {
   const { id } = req.params;
 
   try {
-    const teacher = await Teacher.findById(id).populate({
-      path: "tassignedClass",
-      select: "_id className",
-    });
+    const teacher = await Teacher.findById(id);
 
     if (!teacher) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Teacher not found." });
+      return res.status(404).json({
+        success: false,
+        message: "Teacher not found.",
+      });
     }
 
     res.status(200).json({
       success: true,
-      teacher,
+      data: teacher,
     });
   } catch (error) {
+    console.error("Error fetching teacher:", error);
     res.status(500).json({
       success: false,
       message: "Internal Server Error",
@@ -107,134 +73,122 @@ const getTeacherByID = async (req, res) => {
 };
 
 const createTeacher = async (req, res) => {
-  const {
-    name,
-    gender,
-    dob,
-    email: contactDetails,
-    salary,
-    class: tassignedClass,
-  } = req.body;
-
   try {
-    // Validate required fields
-    if (
-      [name, gender, dob, contactDetails, salary, tassignedClass].some(
-        (field) => !field || field === ""
-      )
-    ) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Missing required fields." });
-    }
+    const { name, gender, dob, email, phone, salary } = req.body;
 
-    // Validate date of birth format
-    if (!isValidDate(dob)) {
+    if (!name || !gender || !dob || !email || !phone || !salary) {
       return res.status(400).json({
         success: false,
-        message: "Invalid date of birth format. Please provide a valid date.",
+        message: "Please provide all required fields.",
       });
     }
 
-    // Check if teacher already exists with the given contactDetails, dob, and gender
-    const existedTeacher = await Teacher.findOne({
-      contactDetails,
-      dob,
-      gender,
-    });
-    if (existedTeacher) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Teacher already exists." });
-    }
-
-    // Create new teacher
-    const newTeacher = await Teacher.create({
+    const newTeacher = new Teacher({
       name,
       gender,
-      dob,
-      contactDetails,
+      dob: new Date(dob),
+      contactDetails: { email, phone },
       salary,
-      tassignedClass,
     });
-    res.status(201).json({ success: true, newTeacher });
+
+    const savedTeacher = await newTeacher.save();
+
+    res.status(201).json({
+      success: true,
+      data: savedTeacher,
+    });
   } catch (error) {
+    console.error("Error creating teacher:", error);
     res.status(500).json({
       success: false,
-      message: "An error occurred while creating the teacher.",
+      message: "Failed to create teacher. Please try again.",
     });
   }
 };
 
 const updateTeacher = async (req, res) => {
-  const teacherId = req.params.id;
-  const {
-    name,
-    gender,
-    dob,
-    email: contactDetails,
-    salary,
-    class: tassignedClass,
-  } = req.body;
+  const { id } = req.params;
 
   try {
-    // Check if teacher exists
-    const teacher = await Teacher.findById(teacherId);
-    if (!teacher) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Teacher not found." });
-    }
+    const { name, gender, dob, email, phone, salary } = req.body;
 
-    // Validate required fields
-    if (
-      [name, gender, dob, contactDetails, salary, tassignedClass].some(
-        (field) => !field || field === ""
-      )
-    ) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Missing required fields." });
+    if (!name || !gender || !dob || !email || !phone || !salary) {
+      return res.status(400).json({
+        success: false,
+        message: "Please provide all required fields.",
+      });
     }
 
     const updatedTeacher = await Teacher.findByIdAndUpdate(
-      teacherId,
-      { $set: { name, gender, dob, contactDetails, salary, tassignedClass } },
+      id,
+      {
+        name,
+        gender,
+        dob: new Date(dob),
+        contactDetails: { email, phone },
+        salary,
+      },
       { new: true }
     );
-    res.status(200).json({ success: true, updatedTeacher });
+
+    if (!updatedTeacher) {
+      return res.status(404).json({
+        success: false,
+        message: "Teacher not found or could not be updated.",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: updatedTeacher,
+    });
   } catch (error) {
+    console.error("Error updating teacher:", error);
     res.status(500).json({
       success: false,
-      message: "An error occurred while updating the teacher.",
+      message: "Failed to update teacher. Please try again.",
     });
   }
 };
 
 const deleteTeacher = async (req, res) => {
-  const teacherId = req.params.id;
+  const { id } = req.params;
 
   try {
-    // Check if teacher exists
-    const teacher = await Teacher.findById(teacherId);
-    if (!teacher) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Teacher not found." });
+    // Check if teacher is assigned to any class
+    const teacherAssigned = await Class.exists({ teacher: id });
+    if (teacherAssigned) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Teacher cannot be deleted as they are assigned to one or more classes.",
+      });
     }
 
-    const deletedTeacher = await Teacher.deleteOne({ _id: teacher._id });
+    const deletedTeacher = await Teacher.findByIdAndDelete(id);
 
-    res.json({ success: true, message: "Teacher deleted successfully." });
+    if (!deletedTeacher) {
+      return res.status(404).json({
+        success: false,
+        message: "Teacher not found or already deleted.",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Teacher deleted successfully.",
+      data: deletedTeacher,
+    });
   } catch (error) {
+    console.error("Error deleting teacher:", error);
     res.status(500).json({
       success: false,
-      message: "An error occurred while deleting the teacher.",
+      message: "Failed to delete teacher. Please try again.",
     });
   }
 };
 
-const getAnalytics = async (req, res) => {
+const getTeacherAnalytics = async (req, res) => {
   try {
     const { view, month, year } = req.query;
 
@@ -257,45 +211,80 @@ const getAnalytics = async (req, res) => {
         .json({ success: false, message: "Year is required for yearly view" });
     }
 
-    let matchQuery = {};
+    let matchStageTeacher = {};
+    let matchStageStudent = {};
+
     if (view === "monthly") {
-      matchQuery.createdAt = {
-        $gte: new Date(`${year}-${month}-01T00:00:00.000Z`),
-        $lte: new Date(`${year}-${month}-31T23:59:59.999Z`),
+      matchStageTeacher = {
+        $match: {
+          $expr: {
+            $and: [
+              { $eq: [{ $year: "$createdAt" }, parseInt(year)] },
+              { $eq: [{ $month: "$createdAt" }, parseInt(month)] },
+            ],
+          },
+        },
       };
-    } else {
-      // Yearly view
-      matchQuery.createdAt = {
-        $gte: new Date(`${year}-01-01T00:00:00.000Z`),
-        $lte: new Date(`${year}-12-31T23:59:59.999Z`),
+
+      matchStageStudent = {
+        $match: {
+          $expr: {
+            $and: [
+              { $eq: [{ $year: "$createdAt" }, parseInt(year)] },
+              { $eq: [{ $month: "$createdAt" }, parseInt(month)] },
+            ],
+          },
+        },
+      };
+    } else if (view === "yearly") {
+      matchStageTeacher = {
+        $match: {
+          $expr: {
+            $eq: [{ $year: "$createdAt" }, parseInt(year)],
+          },
+        },
+      };
+
+      matchStageStudent = {
+        $match: {
+          $expr: {
+            $eq: [{ $year: "$createdAt" }, parseInt(year)],
+          },
+        },
       };
     }
 
     const totalTeacherExpenses = await Teacher.aggregate([
-      { $match: matchQuery },
-      { $group: { _id: null, totalSalary: { $sum: "$salary" } } },
+      matchStageTeacher,
+      {
+        $group: {
+          _id: null,
+          totalSalary: { $sum: "$salary" },
+        },
+      },
     ]);
 
     const totalStudentIncome = await Student.aggregate([
-      { $match: matchQuery },
-      { $group: { _id: null, totalFeesPaid: { $sum: "$feesPaid" } } },
+      matchStageStudent,
+      {
+        $group: {
+          _id: null,
+          totalFeesPaid: { $sum: "$feesPaid" },
+        },
+      },
     ]);
-
-    const analyticsData = {
-      totalTeacherExpenses:
-        totalTeacherExpenses.length > 0
-          ? totalTeacherExpenses[0].totalSalary
-          : 0,
-      totalStudentIncome:
-        totalStudentIncome.length > 0 ? totalStudentIncome[0].totalFeesPaid : 0,
-    };
 
     res.status(200).json({
       success: true,
-      expenses: analyticsData.totalTeacherExpenses,
-      income: analyticsData.totalStudentIncome,
+      expenses:
+        totalTeacherExpenses.length > 0
+          ? totalTeacherExpenses[0].totalSalary
+          : 0,
+      income:
+        totalStudentIncome.length > 0 ? totalStudentIncome[0].totalFeesPaid : 0,
     });
   } catch (error) {
+    console.error("Error fetching analytics data:", error);
     res.status(500).json({
       success: false,
       message: "An error occurred while fetching analytics data",
@@ -303,28 +292,11 @@ const getAnalytics = async (req, res) => {
   }
 };
 
-const getAllTeachersName = async (req, res) => {
-  try {
-    const teachers = await Teacher.find({}, "_id name");
-
-    res.status(200).json({
-      success: true,
-      teachers,
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: "Internal Server Error",
-    });
-  }
-};
-
 export {
   getAllTeachers,
-  getTeacherByID,
+  getTeacherById,
   createTeacher,
   updateTeacher,
   deleteTeacher,
-  getAnalytics,
-  getAllTeachersName,
+  getTeacherAnalytics,
 };

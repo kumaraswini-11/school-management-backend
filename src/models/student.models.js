@@ -9,7 +9,6 @@ const studentSchema = new Schema(
       type: String,
       required: true,
       trim: true,
-      minlength: [2, "Minimum length of the name should be 2 characters."],
     },
     gender: {
       type: String,
@@ -21,18 +20,23 @@ const studentSchema = new Schema(
       required: true,
     },
     contactDetails: {
-      index: true,
-      type: String,
-      required: true,
-      trim: true,
+      email: { type: String, required: true },
+      phone: { type: String, required: true },
     },
-    feesPaid: {
-      type: Number,
-      required: true,
-    },
-    sassignedClass: {
-      type: mongoose.Schema.Types.ObjectId,
+    feesPaid: { type: Number, required: true, min: 0 },
+    class: {
+      type: Schema.Types.ObjectId,
       ref: "Class",
+      required: true,
+      validate: {
+        validator: function (v) {
+          return mongoose
+            .model("Class")
+            .findById(v)
+            .then((cls) => cls.students.length < cls.studentLimit);
+        },
+        message: "Class is full",
+      },
     },
   },
   { timestamps: true }
