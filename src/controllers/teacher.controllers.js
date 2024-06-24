@@ -1,5 +1,6 @@
 import Teacher from "../models/teacher.models.js";
 import Class from "../models/class.models.js";
+import Student from "../models/student.models.js";
 import { validatePaginationParams } from "../utils/validatePagination.js";
 
 const getAllTeachers = async (req, res) => {
@@ -192,7 +193,7 @@ const getTeacherAnalytics = async (req, res) => {
   try {
     const { view, month, year } = req.query;
 
-    if (view !== "monthly" && view !== "yearly") {
+    if (!["monthly", "yearly"].includes(view)) {
       return res
         .status(400)
         .json({ success: false, message: "Invalid view parameter" });
@@ -211,77 +212,33 @@ const getTeacherAnalytics = async (req, res) => {
         .json({ success: false, message: "Year is required for yearly view" });
     }
 
-    let matchStageTeacher = {};
-    let matchStageStudent = {};
-
-    if (view === "monthly") {
-      matchStageTeacher = {
-        $match: {
-          $expr: {
-            $and: [
-              { $eq: [{ $year: "$createdAt" }, parseInt(year)] },
-              { $eq: [{ $month: "$createdAt" }, parseInt(month)] },
-            ],
-          },
-        },
-      };
-
-      matchStageStudent = {
-        $match: {
-          $expr: {
-            $and: [
-              { $eq: [{ $year: "$createdAt" }, parseInt(year)] },
-              { $eq: [{ $month: "$createdAt" }, parseInt(month)] },
-            ],
-          },
-        },
-      };
-    } else if (view === "yearly") {
-      matchStageTeacher = {
-        $match: {
-          $expr: {
-            $eq: [{ $year: "$createdAt" }, parseInt(year)],
-          },
-        },
-      };
-
-      matchStageStudent = {
-        $match: {
-          $expr: {
-            $eq: [{ $year: "$createdAt" }, parseInt(year)],
-          },
-        },
-      };
-    }
-
-    const totalTeacherExpenses = await Teacher.aggregate([
-      matchStageTeacher,
-      {
-        $group: {
-          _id: null,
-          totalSalary: { $sum: "$salary" },
+    const matchStage = {
+      $match: {
+        $expr: {
+          $and: [
+            { $eq: [{ $year: "$createdAt" }, parseInt(year)] },
+            ...(view === "monthly"
+              ? [{ $eq: [{ $month: "$createdAt" }, parseInt(month)] }]
+              : []),
+          ],
         },
       },
+    };
+
+    const totalTeacherExpenses = await Teacher.aggregate([
+      matchStage,
+      { $group: { _id: null, totalSalary: { $sum: "$salary" } } },
     ]);
 
     const totalStudentIncome = await Student.aggregate([
-      matchStageStudent,
-      {
-        $group: {
-          _id: null,
-          totalFeesPaid: { $sum: "$feesPaid" },
-        },
-      },
+      matchStage,
+      { $group: { _id: null, totalFeesPaid: { $sum: "$feesPaid" } } },
     ]);
 
     res.status(200).json({
       success: true,
-      expenses:
-        totalTeacherExpenses.length > 0
-          ? totalTeacherExpenses[0].totalSalary
-          : 0,
-      income:
-        totalStudentIncome.length > 0 ? totalStudentIncome[0].totalFeesPaid : 0,
+      expenses: totalTeacherExpenses[0]?.totalSalary || 0,
+      income: totalStudentIncome[0]?.totalFeesPaid || 0,
     });
   } catch (error) {
     console.error("Error fetching analytics data:", error);
