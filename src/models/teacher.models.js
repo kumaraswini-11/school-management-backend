@@ -30,32 +30,30 @@ const teacherSchema = new Schema(
       min: 0,
     },
     assignedClass: {
-      // This can be null initially
       type: Schema.Types.ObjectId,
       ref: "Class",
-      default: null,
     },
   },
   { timestamps: true }
 );
 
 // Update assignedClass field in Teacher model when Class is updated
-teacherSchema.pre("findOneAndUpdate", async function (next) {
-  const docToUpdate = await this.model.findOne(this.getFilter());
-  const update = this.getUpdate();
+// teacherSchema.pre("findOneAndUpdate", async function (next) {
+//   const docToUpdate = await this.model.findOne(this.getFilter());
+//   const update = this.getUpdate();
 
-  // Check if `assignedClass` field is updated
-  if (
-    update.assignedClass &&
-    docToUpdate.assignedClass !== update.assignedClass
-  ) {
-    // Update associated Class's teacher field
-    await this.model("Class").findByIdAndUpdate(update.assignedClass, {
-      teacher: this._id,
-    });
-  }
+//   // Check if `assignedClass` field is updated
+//   if (
+//     update.assignedClass &&
+//     docToUpdate.assignedClass !== update.assignedClass
+//   ) {
+//     // Update associated Class's teacher field
+//     await this.model("Class").findByIdAndUpdate(update.assignedClass, {
+//       teacher: this._id,
+//     });
+//   }
 
-  next();
-});
+// next();
+// });
 
 export default mongoose.model("Teacher", teacherSchema);

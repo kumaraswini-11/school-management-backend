@@ -91,6 +91,8 @@ const createStudent = async (req, res) => {
       });
     }
 
+    // TODO: check the class is full or not for each class
+
     const newStudent = new Student({
       name,
       gender,

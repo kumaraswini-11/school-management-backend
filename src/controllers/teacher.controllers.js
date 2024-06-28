@@ -75,7 +75,7 @@ const getTeacherById = async (req, res) => {
 
 const createTeacher = async (req, res) => {
   try {
-    const { name, gender, dob, email, phone, salary } = req.body;
+    const { name, gender, dob, email, phone, salary, classes } = req.body;
 
     if (!name || !gender || !dob || !email || !phone || !salary) {
       return res.status(400).json({
@@ -90,6 +90,7 @@ const createTeacher = async (req, res) => {
       dob: new Date(dob),
       contactDetails: { email, phone },
       salary,
+      assignedClass: classes,
     });
 
     const savedTeacher = await newTeacher.save();
@@ -111,7 +112,7 @@ const updateTeacher = async (req, res) => {
   const { id } = req.params;
 
   try {
-    const { name, gender, dob, email, phone, salary } = req.body;
+    const { name, gender, dob, email, phone, salary, classes } = req.body;
 
     if (!name || !gender || !dob || !email || !phone || !salary) {
       return res.status(400).json({
@@ -128,6 +129,7 @@ const updateTeacher = async (req, res) => {
         dob: new Date(dob),
         contactDetails: { email, phone },
         salary,
+        assignedClass: classes,
       },
       { new: true }
     );

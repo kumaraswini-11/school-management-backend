@@ -24,20 +24,22 @@ const studentSchema = new Schema(
       phone: { type: String, required: true },
     },
     feesPaid: { type: Number, required: true, min: 0 },
-    class: {
-      type: Schema.Types.ObjectId,
-      ref: "Class",
-      required: true,
-      validate: {
-        validator: function (v) {
-          return mongoose
-            .model("Class")
-            .findById(v)
-            .then((cls) => cls.students.length < cls.studentLimit);
-        },
-        message: "Class is full",
+    class: [
+      {
+        type: Schema.Types.ObjectId,
+        ref: "Class",
+        required: true,
+        //   validate: {
+        //     validator: function (v) {
+        //       return mongoose
+        //         .model("Class")
+        //         .findById(v)
+        //         .then((cls) => cls.students.length < cls.studentLimit);
+        //     },
+        //     message: "Class is full",
+        //   },
       },
-    },
+    ],
   },
   { timestamps: true }
 );

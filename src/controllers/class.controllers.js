@@ -114,9 +114,10 @@ const updateClass = async (req, res) => {
   const { id } = req.params;
 
   try {
-    const { name, year, studentFees, studentLimit } = req.body;
+    const { name, year, teacher, studentFees, students, studentLimit } =
+      req.body;
 
-    if (!name || !year || !studentFees || !studentLimit) {
+    if (!name || !studentFees || !studentLimit) {
       return res.status(400).json({
         success: false,
         message: "Please provide all required fields.",
@@ -125,7 +126,7 @@ const updateClass = async (req, res) => {
 
     const updatedClass = await Class.findByIdAndUpdate(
       id,
-      { name, year, studentFees, studentLimit },
+      { name, year, teacher, studentFees, students, studentLimit },
       { new: true }
     );
 
